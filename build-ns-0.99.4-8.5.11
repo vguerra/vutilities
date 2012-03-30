@@ -1,0 +1,137 @@
+#!/bin/sh 
+
+
+TCL_VERSION=8.5.11
+NS_VERSION=0.99.4
+COMBINED_VERSIONS=${NS_VERSION}-${TCL_VERSION}
+LEARN_SRC=/usr/local/src/NS-${COMBINED_VERSIONS}
+TCL_SRC=${LEARN_SRC}/tcl${TCL_VERSION}
+TCL=/usr/local/tcl-${COMBINED_VERSIONS}
+TCL_LIB=$TCL/lib
+TCL_INCLUDE=$TCL/include
+POSTGRES=/usr/local/pg-9.0.6
+export POSTGRES=$POSTGRES
+
+cd $TCL_SRC/unix
+make distclean
+./configure --prefix=$TCL \
+    --with-encoding=utf-8 --enable-threads \
+    --enable-shared --enable-64bit --enable-symbols \
+    CFLAGS="-O2 -DGNU_TLS -fstack-protector-all --param=ssp-buffer-size=4"
+make 
+make install;
+
+
+######
+# NS
+######
+NS_SRC=${LEARN_SRC}/naviserver
+NS=/usr/local/ns-${COMBINED_VERSIONS}
+
+unset NAVISERVER
+unset AOLSERVER
+
+
+cd $NS_SRC
+make distclean 
+./autogen.sh --prefix=$NS \
+    --enable-threads --enable-symbols --enable-64bit \
+    --with-tcl=$TCL_LIB \
+    --with-tclinclude=$TCL_INCLUDE \
+    CFLAGS="-O3 -fstack-protector-all --param=ssp-buffer-size=4"
+make 
+make install;
+
+
+# ###############
+# # TCL packages
+# ###############
+
+cd $LEARN_SRC/tcl-modules/trf2.1.4
+make distclean
+./configure --prefix=$TCL --with-tcl=$TCL_LIB \
+    --enable-threads --enable-64bit \
+    --with-tclinclude=$TCL_INCLUDE \
+    --with-zlib-lib-dir=/usr/lib64 
+
+make 
+make install;
+
+cd $LEARN_SRC/tcl-modules/tls1.6
+make distclean
+./configure --exec-prefix=$NS --prefix=$NS \
+    --enable-threads --enable-shared \
+    --enable-64bit --enable-symbols \
+    --with-tcl=$TCL_LIB --with-tclinclude=$TCL_INCLUDE
+
+make 
+make install;
+
+export NS=$NS
+export NAVISERVER=$NS
+export AOLSERVER=$NS
+
+
+##############
+# NS modules
+##############
+
+cd $LEARN_SRC/modules/nsauthpam
+make clean 
+make 
+make install
+
+cd $LEARN_SRC/modules/nsdbpg
+make clean
+make POSTGRESQL=SEPARETELY PGINC=$POSTGRES/include PGLIB=$POSTGRES/lib ACS=1 install
+
+
+# # ##################
+# # # NS OACS modules 
+# # ##################
+
+cd $LEARN_SRC/ns-modules-oacs/aolserver_mod_h264_streaming
+make clean 
+make 
+make install;
+
+cd $LEARN_SRC/ns-modules-oacs/nssha1-0.1
+make INST=$NS clean
+make INST=$NS install
+
+cd $LEARN_SRC/ns-modules-oacs/nsf
+make distclean
+./configure --enable-threads --enable-symbols \
+    --enable-64bit --prefix=$NS \
+    --exec-prefix=$NS --with-tcl=$TCL_LIB
+make 
+make install-aol;
+cp -f $LEARN_SRC/ns-modules-oacs/nstrace-nsf-compat.tcl $NS/tcl/nstrace.tcl
+
+cd $LEARN_SRC/ns-modules-oacs/tcllib-1.14
+export TCL_BIN_DIR=$TCL/bin
+make distclean
+./configure --enable-threads --prefix=$NS 
+make
+make install
+
+cd $LEARN_SRC/ns-modules-oacs/tdom/unix
+make distclean
+../configure --enable-symbols --enable-threads \
+    --enable-64bit --prefix=$NS \
+    --exec-prefix=$NS --with-tcl=$TCL_LIB
+make 
+make install
+
+cd $LEARN_SRC/ns-modules-oacs/thread2.6.7/unix
+make distclean
+../configure --enable-threads \
+      --enable-symbols \
+      --prefix=$NS \
+      --exec-prefix=$NS \
+      --with-aolserver=$NS \
+      --with-tcl=$TCL_LIB
+make 
+make install
+
+cp -f $LEARN_SRC/aolserver-openacs.tcl $NS/tcl/
